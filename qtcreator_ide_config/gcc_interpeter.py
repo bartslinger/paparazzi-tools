@@ -5,8 +5,9 @@ import os
 import re
 
 # Set home directory and unittest directory
-TOOL_DIR = os.path.dirname(os.path.realpath(__file__))
-PAPARAZZI_HOME = os.path.join(TOOL_DIR, os.pardir, os.pardir, os.pardir)
+#TOOL_DIR = os.path.dirname(os.path.realpath(__file__))
+#PAPARAZZI_HOME = os.path.join(TOOL_DIR, os.pardir, os.pardir, os.pardir)
+PAPARAZZI_HOME = os.environ.get('PAPARAZZI_HOME')
 PAPARAZZI_HOME = os.path.realpath(PAPARAZZI_HOME)
 TEST_HOME = os.path.join(PAPARAZZI_HOME, "tests", "unittest")
 
