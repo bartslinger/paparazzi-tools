@@ -9,21 +9,28 @@ import re
 #PAPARAZZI_HOME = os.path.join(TOOL_DIR, os.pardir, os.pardir, os.pardir)
 PAPARAZZI_HOME = os.environ.get('PAPARAZZI_HOME')
 PAPARAZZI_HOME = os.path.realpath(PAPARAZZI_HOME)
-TEST_HOME = os.path.join(PAPARAZZI_HOME, "tests", "unittest")
+TEST_HOME = None
 
 # Only look at gcc command in which compilation of an object takes place.
 # This has the -MMD flag.
-if not (sys.argv[2] == "-MMD"):
+if not (sys.argv[3] == "-MMD"):
     quit()
 
 # Aircraft name substituted in arguments by configure_workspace.py
 AIRCRAFT = sys.argv[1]
+TEST_PARAM = sys.argv[2]
+
+if TEST_PARAM is not "0":
+    TEST_HOME = os.path.realpath(TEST_PARAM)
+    TEST_CONF = True
+else:
+    TEST_CONF = False
 
 # Check if also a test environment is configured for this aircraft
-if not os.path.isfile(os.path.join(TEST_HOME, AIRCRAFT + "Tester.creator")):
-    TEST_CONF = False
-else:
-    TEST_CONF = True
+#if not os.path.isfile(os.path.join(TEST_HOME, AIRCRAFT + "Tester.creator")):
+#    TEST_CONF = False
+#else:
+#    TEST_CONF = True
 
 # Update config+includes only once (this script is called many times, but
 # config and includes are always the same)
@@ -32,9 +39,9 @@ if not os.path.isfile(os.path.join(PAPARAZZI_HOME, AIRCRAFT + ".config")):
     config = open(os.path.join(PAPARAZZI_HOME, AIRCRAFT + ".config"), "w")
     includes = open(os.path.join(PAPARAZZI_HOME, AIRCRAFT + ".includes"), "w")
     if TEST_CONF:
-        test_config_name = os.path.join(TEST_HOME, AIRCRAFT + "Tester.config")
+        test_config_name = os.path.join(TEST_HOME, AIRCRAFT + ".config")
         test_config = open(test_config_name, "w")
-        test_inc_name = os.path.join(TEST_HOME, AIRCRAFT + "Tester.includes")
+        test_inc_name = os.path.join(TEST_HOME, AIRCRAFT + ".includes")
         test_includes = open(test_inc_name, "w")
 
     for argument in sys.argv:
@@ -77,9 +84,9 @@ if not os.path.isfile(os.path.join(PAPARAZZI_HOME, AIRCRAFT + ".config")):
     if TEST_CONF:
         # extra includes for unittest
         EXT_TOOLS = os.path.join(PAPARAZZI_HOME, "sw", "ext")
-        test_includes.write(os.path.join(EXT_TOOLS, "cmock", "src") + "\n")
-        test_includes.write(os.path.join(EXT_TOOLS, "unity", "src") + "\n")
-        test_includes.write(os.path.join(EXT_TOOLS, "unity", "extras",
+        test_includes.write(os.path.join(TEST_HOME, "cmock", "src") + "\n")
+        test_includes.write(os.path.join(TEST_HOME, "unity", "src") + "\n")
+        test_includes.write(os.path.join(TEST_HOME, "unity", "extras",
                                          "fixture", "src") + "\n")
         # close test project files
         test_config.close()
