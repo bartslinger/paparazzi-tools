@@ -12,10 +12,82 @@
 
 #define PPRZ_STX 0x99
 
+/* File pointer for temp.tlm */
 FILE *fp;
+
+/* File pointer for serial link */
 int fd = 0;
 
+/* Paths */
 char sd2log[256];
+char pycommand[256];
+
+/* Setting associated with sdlogger_spi.command */
+unsigned char setting = 0;
+
+/* Global variable to check need for input */
+static volatile bool need_input = true;
+
+/* Global states enum and definition */
+enum global_states {
+  Idle,
+  WaitingForIndexRequestConfirmation,
+  ReadingIndexBlock,
+  GotIndex,
+  Downloading
+};
+enum global_states global_state = Idle;
+
+/* Counter for reading bytes in the index block */
+int index_cnt = 0;
+
+/* PPRZ message parser states */
+enum normal_parser_states {
+  SearchingPPRZ_STX,
+  ParsingLength,
+  ParsingSenderId,
+  ParsingMsgId,
+  ParsingMsgPayload,
+  CheckingCRCA,
+  CheckingCRCB
+};
+
+struct normal_parser_t {
+  enum normal_parser_states state;
+  unsigned char length;
+  int counter;
+  unsigned char sender_id;
+  unsigned char msg_id;
+  unsigned char payload[100];
+  unsigned char crc_a;
+  unsigned char crc_b;
+};
+
+struct normal_parser_t parser;
+
+/* Struct and definition of log info (read from index block) */
+struct log_info_t {
+  uint32_t address;
+  uint32_t length;
+  unsigned int reserved;
+};
+
+struct log_index_t {
+  uint32_t next_available_address;
+  uint8_t last_completed_log;
+  struct log_info_t logs[42];
+} __attribute__((packed));
+
+/* Log index initialization */
+bool index_available = false;
+struct log_index_t log_index;
+
+/* Identifier of the log that is currently being downloaded */
+uint8_t current_download = 0;
+
+
+/* Function definitions */
+void process_command(char *command);
 
 void new_logfile(void)
 {
@@ -27,8 +99,6 @@ void close_logfile(void)
   fclose(fp);
 }
 
-
-static volatile bool need_input = true;
 
 /* For ctrl+c */
 static volatile int keep_running = 1;
@@ -185,7 +255,7 @@ void close_port(void)
   close(fd);
 }
 
-void write_setting(unsigned char setting, float value)
+void write_command(float value)
 {
   unsigned char msg[12];
   unsigned char crc_a = 0;
@@ -221,48 +291,8 @@ void write_setting(unsigned char setting, float value)
   msg[10] = crc_a;
   msg[11] = crc_b;
 
-  //int bytes;
-  //bytes =
   write(fd, msg, length);
-  //printf("Written %d bytes\n", bytes);
-  //printf("Starting log %u\n", (unsigned int)value);
-
 }
-
-enum global_states {
-  Idle,
-  WaitingForIndexRequestConfirmation,
-  ReadingIndexBlock,
-  GotIndex,
-  Downloading
-};
-
-enum global_states global_state;
-int index_cnt = 0;
-
-
-enum normal_parser_states {
-  SearchingPPRZ_STX,
-  ParsingLength,
-  ParsingSenderId,
-  ParsingMsgId,
-  ParsingMsgPayload,
-  CheckingCRCA,
-  CheckingCRCB
-};
-
-struct normal_parser_t {
-  enum normal_parser_states state;
-  unsigned char length;
-  int counter;
-  unsigned char sender_id;
-  unsigned char msg_id;
-  unsigned char payload[100];
-  unsigned char crc_a;
-  unsigned char crc_b;
-};
-
-struct normal_parser_t parser;
 
 /*
  * PPRZ-message: ABCxxxxxxxDE
@@ -346,6 +376,8 @@ void parse_single_byte(unsigned char byte)
                parser.length,
                parser.payload[0]);*/
         //printf("Request confirmed\n");
+
+        /* Check what to do next if the command was received */
         if (global_state == WaitingForIndexRequestConfirmation
             && parser.payload[0] == 60) {
           global_state = ReadingIndexBlock;
@@ -353,7 +385,6 @@ void parse_single_byte(unsigned char byte)
         }
         if (global_state == GotIndex
             && parser.payload[0] == 60) {
-          searching = false;
           global_state = Downloading;
           new_logfile();
           index_cnt = 0;
@@ -369,25 +400,6 @@ void parse_single_byte(unsigned char byte)
 
 }
 
-struct log_info_t {
-  uint32_t address;
-  uint32_t length;
-  unsigned int reserved;
-};
-
-struct log_index_t {
-  uint32_t next_available_address;
-  uint8_t last_completed_log;
-  struct log_info_t logs[42];
-} __attribute__((packed));
-
-
-/* Log index initialization */
-bool index_available = false;
-struct log_index_t log_index;
-
-uint8_t current_download = 1;
-
 void parse_index_byte(unsigned char byte)
 {
   unsigned char *pc;
@@ -396,8 +408,7 @@ void parse_index_byte(unsigned char byte)
   index_cnt++;
   if (index_cnt >= 512) {
     /* Plot results: */
-    //printf("Next address: \t\t 0x%08x\n", be32toh(log_index.logs[0].address));
-    printf("\n\n\n\nNumber of Logs: %u\n", log_index.last_completed_log);
+    printf("\n\nNumber of Logs: %u\n", log_index.last_completed_log);
     printf("Log number \t Address \t Length [bytes]\n");
     for (uint8_t i = 0; i < log_index.last_completed_log; i++) {
       printf("%u \t\t 0x%08x \t %u \n",
@@ -405,26 +416,27 @@ void parse_index_byte(unsigned char byte)
              be32toh(log_index.logs[i].address),
              be32toh(log_index.logs[i].length)*512);
     }
-    printf("\n");
-    /* Start first download */
-    if (log_index.last_completed_log > 0) {
-      //write_setting(60, 1);
-      searching = false;
-      global_state = GotIndex;
-    }
+    searching = false;
+    global_state = GotIndex;
   }
 }
 
 void parse_download_byte(unsigned char byte)
 {
-  static int dcnt = 0;
+  static long long dcnt = 0;
   dcnt++;
   //printf("Got \t (%d) \t 0x%02x\n", dcnt, byte);
   fputc(byte, fp);
 
+  /* Show progress */
+  if (dcnt % 512 == 0) {
+    printf(".");
+    fflush(stdout);
+  }
+
   if (dcnt >= be32toh(log_index.logs[current_download-1].length)*512){
     /* Download finished */
-    printf("Downloaded log %u\n", current_download);
+    printf("\nDownloaded log %u\n", current_download);
     /* Close temp file */
     close_logfile();
     /* Process data into log format */
@@ -487,21 +499,16 @@ void process_command(char *command)
 
   if (strcmp(token, "download") == 0) {
     token = strtok(NULL, search);
-    if (strcmp(token, "all") == 0) {
-      printf("Downloading all.\n");
+    int download_id = atoi(token);
+    if (in_download_range(download_id)) {
+      printf("Downloading %i", download_id);
+      write_command(download_id);
+      current_download = download_id;
+      global_state = GotIndex;
     }
     else {
-      int download_id = atoi(token);
-      if (in_download_range(download_id)) {
-        printf("Downloading %i\n", download_id);
-        write_setting(60, download_id);
-        current_download = download_id;
-        global_state = GotIndex;
-      }
-      else {
-        printf("Log ID %i outside available range\n", download_id);
-        need_input = true;
-      }
+      printf("Log ID %i outside available range\n", download_id);
+      need_input = true;
     }
   }
   else if (strcmp(token, "exit") == 0) {
@@ -519,11 +526,6 @@ void process_command(char *command)
 /* Main function */
 int main ( int argc, char** argv)
 {
-  /* Obtain sd2log directory */
-  char *pprz_home;
-  pprz_home = getenv( "PAPARAZZI_HOME" );
-  strcat(sd2log, pprz_home);
-  strcat(sd2log, "/sw/logalizer/sd2log temp.tlm");
 
   /* Default settings for serial connection */
   char *port = "/dev/ttyUSB0";
@@ -533,11 +535,17 @@ int main ( int argc, char** argv)
   int bytes;
   unsigned char buff[32];
 
+  /* Aircraft ID */
+  int ac_id = 114;
+
   /* Parse arguments */
   int c;
-  while ((c = getopt (argc, argv, "p:b:h")) != -1) {
+  while ((c = getopt (argc, argv, "a:p:b:h")) != -1) {
     switch (c)
     {
+      case 'a':
+        ac_id = atoi(optarg);
+        break;
       case 'p':
         port = optarg;
         break;
@@ -548,11 +556,37 @@ int main ( int argc, char** argv)
       default:
         printf("usage: sdlogger_download [options]\n"
                "  options:\n"
+               "    -a \tAircraft ID\n"
                "    -p \tPort (default: /dev/ttyUSB0).\n"
                "    -b \tBaudrate (default: 57600).\n"
                "    -h \tHelp, shows this message.\n");
         exit(0);
     }
+  }
+
+  /* Obtain sd2log directory */
+  char *pprz_home;
+  pprz_home = getenv( "PAPARAZZI_HOME" );
+  strcat(sd2log, pprz_home);
+  strcat(sd2log, "/sw/logalizer/sd2log temp.tlm");
+
+  /* Get the setting ID with a python script */
+  /* TODO: would be nicer to have a C xml parser */
+  FILE *in = NULL;
+  strcat(pycommand, pprz_home);
+  strcat(pycommand, "/sw/ground_segment/python/sdlogger_download/get_setting_id.py %u sdlogger_spi.command");
+  char new_command[256];
+  sprintf(new_command, pycommand, ac_id, "ab");
+  strcpy(pycommand, new_command);
+
+  char returnvalue[128];
+  in = popen(pycommand, "r");
+  fgets(returnvalue, 128, in);
+  setting = atoi(returnvalue);
+  pclose(in);
+  if (setting == 0) {
+    printf("Aborting: %s\n", returnvalue);
+    exit(0);
   }
 
   /* Enable Ctrl+C */
@@ -567,12 +601,12 @@ int main ( int argc, char** argv)
   /* Keep polling for logger */
   printf("Searching for logger..");
   time_t counter = time(0);
-  time_t timeout = 1;
+  time_t timeout = 1; // every second
   while (keep_running && searching) {
     if (time(0) - counter >= timeout) {
       printf(".");
       fflush(stdout);
-      write_setting(60, 255);
+      write_command(255);
       global_state = WaitingForIndexRequestConfirmation;
       counter = time(0);
     }
@@ -584,6 +618,11 @@ int main ( int argc, char** argv)
   }
 
   char command[128];
+  strcpy(command, "help");
+  /* Show available commands */
+  printf("\n");
+  process_command(command);
+
 
   while (keep_running) {
     if (need_input) {
