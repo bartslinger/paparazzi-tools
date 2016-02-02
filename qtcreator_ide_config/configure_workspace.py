@@ -8,12 +8,13 @@ import time
 # Set home directory and unittest directory
 TOOL_DIR = os.path.dirname(os.path.realpath(__file__))
 #PAPARAZZI_HOME = os.path.join(TOOL_DIR, os.pardir, os.pardir, os.pardir)
-PAPARAZZI_HOME = os.environ.get('PAPARAZZI_HOME')
-PAPARAZZI_HOME = os.path.realpath(PAPARAZZI_HOME)
+PAPARAZZI_HOME = "/home/houjebek/paparazzi/" #os.environ.get('PAPARAZZI_HOME')
+#PAPARAZZI_HOME = os.path.realpath(PAPARAZZI_HOME)
 #TEST_HOME = os.path.join(PAPARAZZI_HOME, os.pardir, "paparazzi-unittest")
 
 # Aircraft name is argument and should be equal to project name
 AIRCRAFT = sys.argv[1]
+TARGET = sys.argv[2]
 
 # Check if the IDE files exist with that name
 if not os.path.isfile(os.path.join(PAPARAZZI_HOME, AIRCRAFT + ".creator")):
@@ -31,11 +32,11 @@ if not os.path.isfile(os.path.join(PAPARAZZI_HOME, AIRCRAFT + ".creator")):
 yml_template = None
 TEST_CONF = False
 # If second argument given, generate unittest configuration file
-if len(sys.argv) > 2:
+if len(sys.argv) > 3:
     # Check if this argument is a template file
-    yml_template = sys.argv[2]
+    yml_template = sys.argv[3]
     TEST_HOME = os.path.dirname(yml_template)
-    if not os.path.isfile(sys.argv[2]):
+    if not os.path.isfile(sys.argv[3]):
         raise Exception("Second argument is not a template file")
     TEST_CONF = True
 
@@ -90,7 +91,7 @@ make_flags = [
     "DMP='python " + os.path.join(TOOL_DIR, "skip_command.py") + "'",
     "NM='python " + os.path.join(TOOL_DIR, "skip_command.py") + "'",
     "NPROCS=1",
-    "ap.compile"
+    TARGET + ".compile"
     ]
 cmd = cmd + " ".join(make_flags)
 print cmd
