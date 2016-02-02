@@ -8,8 +8,8 @@ import time
 # Set home directory and unittest directory
 TOOL_DIR = os.path.dirname(os.path.realpath(__file__))
 #PAPARAZZI_HOME = os.path.join(TOOL_DIR, os.pardir, os.pardir, os.pardir)
-PAPARAZZI_HOME = "/home/houjebek/paparazzi/" #os.environ.get('PAPARAZZI_HOME')
-#PAPARAZZI_HOME = os.path.realpath(PAPARAZZI_HOME)
+PAPARAZZI_HOME = os.environ.get('PAPARAZZI_HOME')
+PAPARAZZI_HOME = os.path.realpath(PAPARAZZI_HOME)
 #TEST_HOME = os.path.join(PAPARAZZI_HOME, os.pardir, "paparazzi-unittest")
 
 # Aircraft name is argument and should be equal to project name
@@ -98,6 +98,8 @@ print cmd
 output = subprocess.call(cmd, cwd=PAPARAZZI_HOME, shell=True)
 print "Done analyzing make output."
 
+subprocess.call(["touch", PAPARAZZI_HOME + "/" + AIRCRAFT + ".creator"])
+print "Refreshed project. Everything should be bon."
 
 ## The next section generates the yml file used for unittesting.
 if TEST_CONF:
