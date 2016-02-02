@@ -98,6 +98,8 @@ print cmd
 output = subprocess.call(cmd, cwd=PAPARAZZI_HOME, shell=True)
 print "Done analyzing make output."
 
+subprocess.call(["touch", PAPARAZZI_HOME + "/" + AIRCRAFT + ".creator"])
+print "Refreshed project. Everything should be bon."
 
 ## The next section generates the yml file used for unittesting.
 if TEST_CONF:
