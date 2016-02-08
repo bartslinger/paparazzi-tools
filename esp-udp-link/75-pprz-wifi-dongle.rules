@@ -1,0 +1,2 @@
+# WiFi dongle configure as Hotspot automatically when connected:
+ATTR{idVendor}=="148f", ATTR{idProduct}=="5370", RUN+="/home/bart/paparazzi-tools/esp-udp-link/configure_wifi_hotspot.sh"
