@@ -434,6 +434,13 @@ void parse_download_byte(unsigned char byte)
     fflush(stdout);
   }
 
+  /* Show progress every 10% */
+  if ( dcnt % (be32toh(log_index.logs[current_download-1].length)*512/10) == 0 ){
+    int percent = (dcnt+1)*100/(be32toh(log_index.logs[current_download-1].length)*512);
+    printf("%i%%", percent);
+    fflush(stdout);
+  }
+
   if (dcnt >= be32toh(log_index.logs[current_download-1].length)*512){
     /* Download finished */
     printf("\nDownloaded log %u\n", current_download);
@@ -574,7 +581,7 @@ int main ( int argc, char** argv)
   /* TODO: would be nicer to have a C xml parser */
   FILE *in = NULL;
   strcat(pycommand, pprz_home);
-  strcat(pycommand, "/sw/ground_segment/python/sdlogger_download/get_setting_id.py %u sdlogger_spi.command");
+  strcat(pycommand, "/sw/logalizer/sdlogger_get_setting_id.py %u sdlogger_spi.command");
   char new_command[256];
   sprintf(new_command, pycommand, ac_id, "ab");
   strcpy(pycommand, new_command);
