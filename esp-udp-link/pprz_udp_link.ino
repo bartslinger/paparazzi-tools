@@ -32,7 +32,7 @@ struct normal_parser_t parser;
 
 /* Set these to your desired credentials. */
 const char *ssid = "e540";
-const char *password = "KwNiyzac";
+const char *password = "LHlqaSgu";
 
 unsigned int localPort = 4243; // port to listen on
 
@@ -42,6 +42,7 @@ uint8_t out_idx = 0;
 
 WiFiUDP udp;
 
+#define DEZE_IS_HOST 0
 
 /* Just a little test message.  Go to http://192.168.4.1 in a web browser
  * connected to this access point to see it.
@@ -50,30 +51,38 @@ IPAddress myIP;
 IPAddress broadcastIP(10,42,0,255);
 
 void setup() {
-  pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
-  digitalWrite(BUILTIN_LED, HIGH);
+  //pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
+  //digitalWrite(BUILTIN_LED, HIGH);
 	delay(1000);
 	Serial.begin(115200);
-	Serial.println();
-	Serial.print("Connnecting to ");
-  Serial.println(ssid);
+	//Serial.println();
+	//Serial.print("Connnecting to ");
+  //Serial.println(ssid);
 	/* You can remove the password parameter if you want the AP to be open. */
-	WiFi.begin(ssid, password);
-
+#if DEZE_IS_HOST
+	WiFi.softAP(ssid, password);
+  myIP = WiFi.softAPIP();
+#else
+  WiFi.begin(ssid, password);
+  
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.print(".");
+    //Serial.print(".");
   }
-  Serial.println("");
-  Serial.println("WiFi connected");  
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
+  myIP = WiFi.localIP();
+#endif
+  //Serial.println("");
+  //Serial.println("WiFi connected");  
+  //Serial.println("IP address: ");
+  Serial.println(myIP);
+
   udp.begin(localPort);
 }
 
 void loop() {
   /* Check for UDP data from host */
   int packetSize = udp.parsePacket();
+  int len = 0;
   if(packetSize) { /* data received */
     //Serial.print("Received packet of size ");
     //Serial.println(packetSize);
@@ -84,10 +93,12 @@ void loop() {
     //Serial.println(udp.remotePort());
     
     // read the packet into packetBufffer
-    int len = udp.read(packetBuffer, 255);
-    if (len > 0) packetBuffer[len] = 0;
+    len = udp.read(packetBuffer, 255);
+    //if (len > 0) packetBuffer[len] = 0;
     //Serial.println("Contents:");
-    Serial.print(packetBuffer);
+    //digitalWrite(BUILTIN_LED, LOW);
+    Serial.write(packetBuffer, len);
+    //delay(10);
     //udp.beginPacketMulticast(broadcastIP, 4242, myIP);
     //udp.write(packetBuffer);
     //udp.endPacket();
@@ -101,14 +112,25 @@ void loop() {
   while(Serial.available() > 0) {
     unsigned char inbyte = Serial.read();
     if (parse_single_byte(inbyte)) { // if complete message detected
-      digitalWrite(BUILTIN_LED, LOW);
+      //digitalWrite(BUILTIN_LED, LOW);
       udp.beginPacketMulticast(broadcastIP, 4242, myIP);
       udp.write(outBuffer, out_idx);
       udp.endPacket();
-      delay(10);
-      digitalWrite(BUILTIN_LED, HIGH);
+      //digitalWrite(BUILTIN_LED, HIGH);
     }
   }
+
+  /* Write to serial here because this stupid shit is BLOCKING */
+  if(packetSize) {
+      //char pong[] = { 0x99, 0x06, 0x70, 0x08, 0x0e, 0x1a}; 
+      //udp.beginPacketMulticast(broadcastIP, 4242, myIP);
+      //udp.write(pong, sizeof(pong));
+      //udp.endPacket();
+    //Serial.write(packetBuffer, len);
+  } else {
+    //delay(10);
+  }
+  delay(10);
 }
 
 /*
@@ -161,7 +183,11 @@ uint8_t parse_single_byte(unsigned char in_byte)
       parser.crc_a += in_byte;
       parser.crc_b += parser.crc_a;
       parser.counter++;
-      parser.state = ParsingMsgPayload;
+      if (parser.length == 6) {
+        parser.state = CheckingCRCA;
+      } else {
+        parser.state = ParsingMsgPayload;
+      }
       break;
 
     case ParsingMsgPayload:
