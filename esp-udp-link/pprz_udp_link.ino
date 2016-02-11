@@ -1,6 +1,11 @@
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
 
+/* Set these to your desired credentials. */
+const char *ssid = "yourssid";
+const char *password = "yourpassword";
+
+unsigned int localPort = 4243; // port to listen on
 
 #define PPRZ_STX 0x99
 
@@ -28,14 +33,6 @@ struct normal_parser_t {
 
 struct normal_parser_t parser;
 
-
-
-/* Set these to your desired credentials. */
-const char *ssid = "e540";
-const char *password = "LHlqaSgu";
-
-unsigned int localPort = 4243; // port to listen on
-
 char packetBuffer[255]; //buffer to hold incoming packet
 char outBuffer[255];    //buffer to hold outgoing data
 uint8_t out_idx = 0;
@@ -44,20 +41,15 @@ WiFiUDP udp;
 
 #define DEZE_IS_HOST 0
 
-/* Just a little test message.  Go to http://192.168.4.1 in a web browser
- * connected to this access point to see it.
- */
 IPAddress myIP;
 IPAddress broadcastIP(10,42,0,255);
 
 void setup() {
-  //pinMode(BUILTIN_LED, OUTPUT);     // Initialize the BUILTIN_LED pin as an output
-  //digitalWrite(BUILTIN_LED, HIGH);
 	delay(1000);
 	Serial.begin(115200);
 	//Serial.println();
 	//Serial.print("Connnecting to ");
-  //Serial.println(ssid);
+    //Serial.println(ssid);
 	/* You can remove the password parameter if you want the AP to be open. */
 #if DEZE_IS_HOST
 	WiFi.softAP(ssid, password);
@@ -71,9 +63,6 @@ void setup() {
   }
   myIP = WiFi.localIP();
 #endif
-  //Serial.println("");
-  //Serial.println("WiFi connected");  
-  //Serial.println("IP address: ");
   Serial.println(myIP);
 
   udp.begin(localPort);
@@ -83,52 +72,21 @@ void loop() {
   /* Check for UDP data from host */
   int packetSize = udp.parsePacket();
   int len = 0;
-  if(packetSize) { /* data received */
-    //Serial.print("Received packet of size ");
-    //Serial.println(packetSize);
-    //Serial.print("From ");
-    //IPAddress remoteIp = udp.remoteIP();
-    //Serial.print(remoteIp);
-    //Serial.print(", port ");
-    //Serial.println(udp.remotePort());
-    
+  if(packetSize) { /* data received on udp line*/
     // read the packet into packetBufffer
     len = udp.read(packetBuffer, 255);
-    //if (len > 0) packetBuffer[len] = 0;
-    //Serial.println("Contents:");
-    //digitalWrite(BUILTIN_LED, LOW);
     Serial.write(packetBuffer, len);
-    //delay(10);
-    //udp.beginPacketMulticast(broadcastIP, 4242, myIP);
-    //udp.write(packetBuffer);
-    //udp.endPacket();
   }
-  //udp.beginPacket("192.168.4.255", 4242);
-  //udp.write(ReplyBuffer);
-  //udp.endPacket();
 
   /* Check for Serial data from drone */
   /* Put all serial in_bytes in a buffer */
   while(Serial.available() > 0) {
     unsigned char inbyte = Serial.read();
     if (parse_single_byte(inbyte)) { // if complete message detected
-      //digitalWrite(BUILTIN_LED, LOW);
       udp.beginPacketMulticast(broadcastIP, 4242, myIP);
       udp.write(outBuffer, out_idx);
       udp.endPacket();
-      //digitalWrite(BUILTIN_LED, HIGH);
     }
-  }
-
-  /* Write to serial here because this stupid shit is BLOCKING */
-  if(packetSize) {
-      //char pong[] = { 0x99, 0x06, 0x70, 0x08, 0x0e, 0x1a}; 
-      //udp.beginPacketMulticast(broadcastIP, 4242, myIP);
-      //udp.write(pong, sizeof(pong));
-      //udp.endPacket();
-    //Serial.write(packetBuffer, len);
-  } else {
-    //delay(10);
   }
   delay(10);
 }
