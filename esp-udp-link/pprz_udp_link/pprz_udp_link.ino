@@ -1,11 +1,6 @@
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
-
-/* Set these to your desired credentials. */
-const char *ssid = "yourssid";
-const char *password = "yourpassword";
-
-unsigned int localPort = 4243; // port to listen on
+#include "wifi_config.h"
 
 #define PPRZ_STX 0x99
 
@@ -39,22 +34,14 @@ uint8_t out_idx = 0;
 
 WiFiUDP udp;
 
-#define DEZE_IS_HOST 0
-
 IPAddress myIP;
-IPAddress broadcastIP(10,42,0,255);
 
 void setup() {
-	delay(1000);
-	Serial.begin(115200);
-	//Serial.println();
-	//Serial.print("Connnecting to ");
-    //Serial.println(ssid);
-	/* You can remove the password parameter if you want the AP to be open. */
-#if DEZE_IS_HOST
-	WiFi.softAP(ssid, password);
-  myIP = WiFi.softAPIP();
-#else
+  delay(1000);
+  Serial.begin(115200);
+  //Serial.println();
+  //Serial.print("Connnecting to ");
+  //Serial.println(ssid);
   WiFi.begin(ssid, password);
   
   while (WiFi.status() != WL_CONNECTED) {
@@ -62,8 +49,7 @@ void setup() {
     //Serial.print(".");
   }
   myIP = WiFi.localIP();
-#endif
-  Serial.println(myIP);
+  //Serial.println(myIP);
 
   udp.begin(localPort);
 }
@@ -83,7 +69,7 @@ void loop() {
   while(Serial.available() > 0) {
     unsigned char inbyte = Serial.read();
     if (parse_single_byte(inbyte)) { // if complete message detected
-      udp.beginPacketMulticast(broadcastIP, 4242, myIP);
+      udp.beginPacketMulticast(broadcastIP, txPort, myIP);
       udp.write(outBuffer, out_idx);
       udp.endPacket();
     }
